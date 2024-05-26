@@ -3,12 +3,17 @@ import numpy as np
 import librosa
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
+import tensorflow as tf
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras import layers, models
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.regularizers import L2
 import warnings
 warnings.filterwarnings('ignore')
+
+gpus = tf.config.experimental.list_physical_devices('GPU')
+for gpu in gpus:
+    tf.config.experimental.set_memory_growth(gpu, True)
 
 data_path = './musicData'
 
@@ -19,8 +24,6 @@ window_size = 2048
 hop_size = 512
 mel_bins = 128
 
-frames_per_sec = sample_rate // hop_size
-frames_num = frames_per_sec * audio_duration
 audio_samples = int(sample_rate * audio_duration)
 
 # Helper Functions
@@ -123,26 +126,26 @@ y_test_one_hot = to_categorical(y_test_encoded, num_classes)
 # Build Model
 model = models.Sequential()
 
-model.add(layers.Conv2D(32, (3, 3), activation='relu', input_shape=input_shape, kernel_regularizer=L2(0.001)))
+model.add(layers.Conv2D(16, (3, 3), activation='relu', input_shape=input_shape, kernel_regularizer=L2(0.001)))
 model.add(layers.BatchNormalization())
 model.add(layers.MaxPooling2D((2, 2)))
 
-model.add(layers.Conv2D(64, (3, 3), activation='relu'))
+model.add(layers.Conv2D(32, (3, 3), activation='relu', kernel_regularizer=L2(0.001)))
 model.add(layers.BatchNormalization())
 model.add(layers.MaxPooling2D((2, 2)))
 
-model.add(layers.Conv2D(128, (3, 3), activation='relu'))
+model.add(layers.Conv2D(64, (3, 3), activation='relu',kernel_regularizer=L2(0.001)))
 model.add(layers.BatchNormalization())
 model.add(layers.MaxPooling2D((2, 2)))
 
+model.add(layers.Dropout(0.3))
+
+model.add(layers.GlobalAveragePooling2D())
+
+model.add(layers.Dense(128, activation='relu', kernel_regularizer=L2(0.001)))
 model.add(layers.Dropout(0.2))
 
-model.add(layers.Flatten())
-
-model.add(layers.Dense(128, activation='relu'))
-model.add(layers.Dropout(0.1))
-
-model.add(layers.Dense(128, activation='relu'))
+model.add(layers.Dense(64, activation='relu', kernel_regularizer=L2(0.01)))
 model.add(layers.Dropout(0.1))
 
 model.add(layers.Dense(num_classes, activation='softmax'))
@@ -154,6 +157,6 @@ model.compile(optimizer=Adam(learning_rate=0.0001),
 print(model.summary())
 
 # Train Model
-model.fit(X_train, y_train_one_hot, epochs=15, batch_size=16, validation_data=(X_test, y_test_one_hot))
+model.fit(X_train, y_train_one_hot, epochs=80, batch_size=8, validation_data=(X_test, y_test_one_hot))
 model.save_weights('music_genre_weights.weights.h5')
 test_loss, test_acc = model.evaluate(X_test, y_test_one_hot)
