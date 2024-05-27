@@ -1,12 +1,11 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import librosa
-import librosa.display
 import tensorflow as tf
 from tensorflow.keras import layers, models
 from tensorflow.keras.regularizers import L2
 from sklearn.preprocessing import LabelEncoder
 import warnings
+
 warnings.filterwarnings('ignore')
 
 # Constants
@@ -15,7 +14,6 @@ sample_rate = 22050
 window_size = 2048
 hop_size = 512
 mel_bins = 128
-
 data_path = './musicData'
 audio_samples = int(sample_rate * audio_duration)
 
@@ -72,31 +70,30 @@ label_encoder.fit(genres)
 input_shape = (128, 128, 1)
 num_classes = len(genres)
 
-model = models.Sequential()
+model = models.Sequential([
+    layers.Conv2D(16, (3, 3), activation='relu', input_shape=input_shape, kernel_regularizer=L2(0.001)),
+    layers.BatchNormalization(),
+    layers.MaxPooling2D((2, 2)),
 
-model.add(layers.Conv2D(16, (3, 3), activation='relu', input_shape=input_shape, kernel_regularizer=L2(0.001)))
-model.add(layers.BatchNormalization())
-model.add(layers.MaxPooling2D((2, 2)))
+    layers.Conv2D(32, (3, 3), activation='relu', kernel_regularizer=L2(0.001)),
+    layers.BatchNormalization(),
+    layers.MaxPooling2D((2, 2)),
 
-model.add(layers.Conv2D(32, (3, 3), activation='relu', kernel_regularizer=L2(0.001)))
-model.add(layers.BatchNormalization())
-model.add(layers.MaxPooling2D((2, 2)))
+    layers.Conv2D(64, (3, 3), activation='relu', kernel_regularizer=L2(0.001)),
+    layers.BatchNormalization(),
+    layers.MaxPooling2D((2, 2)),
 
-model.add(layers.Conv2D(64, (3, 3), activation='relu',kernel_regularizer=L2(0.001)))
-model.add(layers.BatchNormalization())
-model.add(layers.MaxPooling2D((2, 2)))
+    layers.Dropout(0.3),
+    layers.GlobalAveragePooling2D(),
+    
+    layers.Dense(128, activation='relu', kernel_regularizer=L2(0.001)),
+    layers.Dropout(0.2),
 
-model.add(layers.Dropout(0.3))
+    layers.Dense(64, activation='relu', kernel_regularizer=L2(0.01)),
+    layers.Dropout(0.1),
 
-model.add(layers.GlobalAveragePooling2D())
-
-model.add(layers.Dense(128, activation='relu', kernel_regularizer=L2(0.001)))
-model.add(layers.Dropout(0.2))
-
-model.add(layers.Dense(64, activation='relu', kernel_regularizer=L2(0.01)))
-model.add(layers.Dropout(0.1))
-
-model.add(layers.Dense(num_classes, activation='softmax'))
+    layers.Dense(num_classes, activation='softmax')
+])
 
 # Load model weights
 model.load_weights('./music_genre_weights.weights.h5')
@@ -104,11 +101,12 @@ model.load_weights('./music_genre_weights.weights.h5')
 def classify_audio(file_path):
     mel_spec = extract_mel_spectrogram(file_path)
 
-    if mel_spec.shape[1] < 128:
-        pad_width = 128 - mel_spec.shape[1]
-        mel_spec = np.pad(mel_spec, ((0, 0), (0, pad_width), (0, 0)), mode='constant')
-    elif mel_spec.shape[1] > 128:
-        mel_spec = mel_spec[:, :128, :]
+    # Ensure the Mel spectrogram has the shape (128, 128, 1)
+    if mel_spec.shape[0] < 128:
+        pad_width = 128 - mel_spec.shape[0]
+        mel_spec = np.pad(mel_spec, ((0, pad_width), (0, 0), (0, 0)), mode='constant')
+    elif mel_spec.shape[0] > 128:
+        mel_spec = mel_spec[:128, :, :]
 
     mel_spec = np.expand_dims(mel_spec, axis=0)  # Add batch dimension
     predictions = model.predict(mel_spec)
